@@ -2,7 +2,6 @@ package lefatshelarona.Database.controller;
 
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.UsersResource;
-import jakarta.ws.rs.core.Response; // Using jakarta.ws.rs if using Keycloak admin client 22.x
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
