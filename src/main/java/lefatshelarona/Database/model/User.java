@@ -17,7 +17,6 @@ public class User {
     private String name;
     private String phone;
     private String profilePicture;
-    private String role;
     private String username;
     private String password;  // Add this field for authentication
 
@@ -32,7 +31,7 @@ public class User {
         this.name = name;
         this.phone = phone;
         this.profilePicture = profilePicture;
-        this.role = role;
+
         this.username = username;
         this.password = password;
     }

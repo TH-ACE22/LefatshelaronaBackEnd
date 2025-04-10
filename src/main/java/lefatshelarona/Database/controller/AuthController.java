@@ -2,31 +2,54 @@ package lefatshelarona.Database.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lefatshelarona.Database.dto.RegisterRequest;
 import lefatshelarona.Database.dto.LoginRequest;
 import lefatshelarona.Database.service.AuthService;
 
 @RestController
 @RequestMapping("/auth")
+@Tag(name = "Authentication", description = "Handles user registration and login instructions")
 public class AuthController {
+
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
         this.authService = authService;
     }
 
+    @Operation(
+            summary = "Register a new user",
+            description = "Creates a new user account in Keycloak. Users must verify their email before accessing the app."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "User registered successfully",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = String.class))
+    )
+    @ApiResponse(responseCode = "400", description = "Bad request - Invalid input")
+    @ApiResponse(responseCode = "409", description = "Conflict - User already exists")
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestBody RegisterRequest request) {
-        String result = authService.registerUser(request);
-        return ResponseEntity.ok(result);
+        return authService.registerUser(request);
     }
 
+    @Operation(
+            summary = "Login user",
+            description = "Authenticates the user using Keycloak Direct Grant flow and returns a JWT token."
+    )
+    @ApiResponse(
+            responseCode = "200",
+            description = "User authenticated successfully",
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = String.class))
+    )
+    @ApiResponse(responseCode = "400", description = "Invalid credentials")
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody LoginRequest request) {
-        String token = authService.loginUser(request);
-        if (token != null) {
-            return ResponseEntity.ok(token);
-        }
-        return ResponseEntity.status(401).body("Invalid credentials");
+    public ResponseEntity<String> login(@RequestBody LoginRequest request) {
+        return authService.loginUser(request);
     }
 }
