@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import lefatshelarona.Database.model.User;
+import  lefatshelarona.Database.model.User;
 import lefatshelarona.Database.repository.UserRepository;
 
 import java.util.Collections;
@@ -23,7 +23,6 @@ public class UserController {
     @Autowired
     private UserRepository userRepository;
 
-    // Inject the Keycloak admin client (configured to use your Lefatshe-Larona realm)
     @Autowired
     private Keycloak keycloak;
 
@@ -31,7 +30,8 @@ public class UserController {
     @ApiResponse(responseCode = "201", description = "User created successfully")
     @PostMapping("/create")
     public ResponseEntity<User> createUser(@RequestBody User user) {
-        return ResponseEntity.ok(userRepository.save(user));
+        User savedUser = userRepository.save(user);
+        return ResponseEntity.status(201).body(savedUser);
     }
 
     @Operation(summary = "Get all users", description = "Fetches all users from the system.")
@@ -58,13 +58,12 @@ public class UserController {
             user.setEmail(updatedUser.getEmail());
             user.setFullName(updatedUser.getFullName());
             user.setJoinedChannels(updatedUser.getJoinedChannels());
-            user.setLocation(updatedUser.getLocation());
+            user.setCommunity(updatedUser.getCommunity()); // ✅ NEW
             user.setName(updatedUser.getName());
             user.setPhone(updatedUser.getPhone());
             user.setProfilePicture(updatedUser.getProfilePicture());
-            // Optionally, if roles are solely managed by Keycloak, omit updating role here:
-            // user.setRole(updatedUser.getRole());
             user.setUsername(updatedUser.getUsername());
+            // Optionally update role or other flags if allowed
             return ResponseEntity.ok(userRepository.save(user));
         }
         return ResponseEntity.notFound().build();
@@ -82,22 +81,16 @@ public class UserController {
 
     @Operation(
             summary = "Resend Email Verification",
-            description = "Triggers Keycloak to send a verification email to the user in the Lefatshe-Larona realm. " +
-                    "Provide the Keycloak user ID (UID) as the path variable."
+            description = "Triggers Keycloak to send a verification email to the user in the Lefatshe-Larona realm."
     )
     @ApiResponse(responseCode = "204", description = "Verification email sent successfully")
     @ApiResponse(responseCode = "400", description = "Failed to send verification email")
     @PostMapping("/resendVerification/{keycloakUserId}")
     public ResponseEntity<String> resendVerificationEmail(@PathVariable String keycloakUserId) {
         try {
-            // Obtain the UsersResource for the Lefatshe-Larona realm
             UsersResource usersResource = keycloak.realm("Lefatshe-Larona").users();
-
-            // Trigger the email verification action ("VERIFY_EMAIL")
-            // Note: executeActionsEmail now returns void.
-            usersResource.get(keycloakUserId).executeActionsEmail(Collections.singletonList("VERIFY_EMAIL"));
-
-            // If no exception was thrown, assume success.
+            usersResource.get(keycloakUserId)
+                    .executeActionsEmail(Collections.singletonList("VERIFY_EMAIL"));
             return ResponseEntity.ok("Verification email sent successfully to user in Lefatshe-Larona realm.");
         } catch (Exception e) {
             return ResponseEntity.status(500)

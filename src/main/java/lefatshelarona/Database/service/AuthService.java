@@ -2,97 +2,138 @@ package lefatshelarona.Database.service;
 
 import lefatshelarona.Database.dto.LoginRequest;
 import lefatshelarona.Database.dto.RegisterRequest;
-import lefatshelarona.Database.util.KeycloakUtil;
+import lefatshelarona.Database.repository.UserRepository;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
 import jakarta.ws.rs.core.Response;
+
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 public class AuthService {
-    private final Keycloak keycloak;
 
-    // Inject Keycloak via constructor
-    public AuthService(Keycloak keycloak) {
+    private final Keycloak keycloak;
+    private final UserRepository userRepository;
+    private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
+
+    @Autowired
+    public AuthService(Keycloak keycloak, UserRepository userRepository) {
         this.keycloak = keycloak;
+        this.userRepository = userRepository;
     }
 
-    public ResponseEntity<String> registerUser(RegisterRequest request) {
-        UsersResource usersResource = keycloak.realm("Lefatshe-Larona").users();
+    public boolean isUsernameAvailable(String username) {
+        return userRepository.findByUsername(username).isEmpty();
+    }
 
-        // Check if user already exists
-        if (KeycloakUtil.userExists(usersResource, request.getEmail())) {
-            return ResponseEntity.badRequest().body("User already exists!");
+    public boolean isEmailAvailable(String email) {
+        try {
+            String decodedEmail = URLDecoder.decode(email, StandardCharsets.UTF_8);
+            UsersResource usersResource = keycloak.realm("Lefatshe-Larona").users();
+            return usersResource.search(null, null, null, decodedEmail, 0, 1).isEmpty();
+        } catch (Exception e) {
+            return false; // Assume email not available on error
+        }
+    }
+
+    public ResponseEntity<?> registerUser(RegisterRequest request) {
+        Map<String, String> errorDetails = new HashMap<>();
+
+        if (!isEmailAvailable(request.getEmail())) {
+            errorDetails.put("email", "Email already exists.");
         }
 
-        // Create user representation
-        UserRepresentation user = new UserRepresentation();
-        user.setUsername(request.getUsername());
-        user.setEmail(request.getEmail());
-        user.setFirstName(request.getFullName());
-        user.setEnabled(true);
-        user.setEmailVerified(false);
+        if (!errorDetails.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorDetails);
+        }
 
-        // Set password
+        UsersResource usersResource = keycloak.realm("Lefatshe-Larona").users();
+
+        UserRepresentation keycloakUser = new UserRepresentation();
+        keycloakUser.setUsername(request.getUsername());
+        keycloakUser.setEmail(request.getEmail());
+        keycloakUser.setFirstName(request.getFullName());
+        keycloakUser.setEnabled(true);
+        keycloakUser.setEmailVerified(false);
+        keycloakUser.setRequiredActions(Collections.singletonList("VERIFY_EMAIL"));
+
         CredentialRepresentation password = new CredentialRepresentation();
         password.setType(CredentialRepresentation.PASSWORD);
         password.setValue(request.getPassword());
-        password.setTemporary(false); // User won't have to reset password
+        password.setTemporary(false);
+        keycloakUser.setCredentials(Collections.singletonList(password));
 
-        user.setCredentials(Collections.singletonList(password));
+        try (Response response = usersResource.create(keycloakUser)) {
+            if (response.getStatus() == 201) {
+                // ✅ BONUS: Trigger the verification email after account creation
+                String locationHeader = response.getHeaderString("Location"); // e.g. .../users/{userId}
+                String userId = locationHeader != null ? locationHeader.substring(locationHeader.lastIndexOf("/") + 1) : null;
 
-        // Create the user in Keycloak
-        Response response = usersResource.create(user);
-        if (response.getStatus() == 201) {
-            return ResponseEntity.ok("User registered successfully. Please verify your email.");
-        } else {
-            return ResponseEntity.status(response.getStatus()).body("Failed to register user.");
+                if (userId != null) {
+                    try {
+                        usersResource.get(userId).sendVerifyEmail();
+                    } catch (Exception e) {
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(Map.of("error", "User created, but failed to send verification email."));
+                    }
+                }
+
+                return ResponseEntity.ok("Account created. Please check your email to verify.");
+            } else {
+                Map<String, String> keycloakError = new HashMap<>();
+                keycloakError.put("error", "Failed to register user in Keycloak.");
+                return ResponseEntity.status(response.getStatus()).body(keycloakError);
+            }
         }
     }
 
-    // Implemented login using Direct Grant (Resource Owner Password Credentials) flow
-    public ResponseEntity<String> loginUser(LoginRequest request) {
-        String tokenUrl = "http://localhost:8080/realms/Lefatshe-Larona/protocol/openid-connect/token";
-        RestTemplate restTemplate = new RestTemplate();
 
-        // Prepare the form data for token request
+
+
+    // Optional endpoint you can create: POST /auth/save-profile-after-verification
+    // That endpoint would take keycloakId or email and save the verified user info into MongoDB
+
+    public ResponseEntity<String> loginUser(LoginRequest request) {
+        String tokenUrl =
+                "http://localhost:8080/realms/Lefatshe-Larona/protocol/openid-connect/token";
+
+        RestTemplate restTemplate = new RestTemplate();
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add("client_id", "lefatshe-larona-backend");
-        formData.add("client_secret", "cOxcIPFhM5SiHZKY4OPw1tAZxpK0bGQp");
+        formData.add("client_id", "your-client-id");
+        formData.add("client_secret", "your-client-secret");
         formData.add("grant_type", "password");
         formData.add("username", request.getUsername());
-
         formData.add("password", request.getPassword());
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-
-        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formData, headers);
+        HttpEntity<MultiValueMap<String, String>> entity =
+                new HttpEntity<>(formData, headers);
 
         try {
-            // Call Keycloak token endpoint
-            ResponseEntity<String> response = restTemplate.postForEntity(tokenUrl, entity, String.class);
-            if (response.getStatusCode().is2xxSuccessful()) {
-                // Return the token response as is, typically a JSON with access_token, refresh_token, etc.
-                return ResponseEntity.ok(response.getBody());
-            } else {
-                return ResponseEntity.status(response.getStatusCode()).body("Authentication failed.");
-            }
+            ResponseEntity<String> response =
+                    restTemplate.postForEntity(tokenUrl, entity, String.class);
+            return ResponseEntity.status(response.getStatusCode())
+                    .body(response.getBody());
         } catch (Exception e) {
+            logger.error("Login failed", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error during authentication: " + e.getMessage());
+                    .body("Login error: " + e.getMessage());
         }
     }
 }

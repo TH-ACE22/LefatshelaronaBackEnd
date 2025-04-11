@@ -4,6 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -14,7 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+
 
 @Configuration
 public class SecurityConfig {
@@ -22,11 +23,14 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/register", "/auth/login").permitAll()
+                        .requestMatchers("/auth/check-username/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/users/resendVerification/**").permitAll()
+                        .requestMatchers("/auth/check-email/**").permitAll()
+
                         .requestMatchers("/oauth2/**").permitAll()
                         // Queries
                         .requestMatchers(HttpMethod.GET, "/queries/**").authenticated()
@@ -75,7 +79,7 @@ public class SecurityConfig {
                 List<String> roles = (List<String>) realmAccess.get("roles");
                 authorities.addAll(roles.stream()
                         .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                        .collect(Collectors.toList()));
+                        .toList());
             }
             return authorities;
         });
