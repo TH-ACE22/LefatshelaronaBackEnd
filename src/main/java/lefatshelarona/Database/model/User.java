@@ -1,14 +1,17 @@
 package lefatshelarona.Database.model;
 
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
-import lombok.Data;
 
 import java.util.List;
 
 @Data
+@NoArgsConstructor
 @Document(collection = "users")
 public class User {
+
     @Id
     private String id;
 
@@ -16,32 +19,29 @@ public class User {
     private boolean emailVerified;
 
     private String email;
-    private String fullName;
-    private List<String> joinedChannels;
-    private String community;                // 🔧 New field added here
-    private String name;
+    private String firstName;
+    private String lastName;
     private String phone;
-    private String profilePicture;
     private String username;
-    private String password;
     private String role;
 
-    public User() {}
+    private String profilePicture;       // to be filled later
+    private String community;            // to be filled later
+    private List<String> joinedChannels; // to be filled later
 
-    public User(String email, String fullName, List<String> joinedChannels, String community,
-                String name, String phone, String profilePicture, String role,
-                String username, String password, String keycloakId, boolean emailVerified) {
+    public User(String email, String firstName, String lastName, String community,
+                String phone, String profilePicture, String role,
+                String username, String keycloakId, boolean emailVerified, List<String> joinedChannels) {
         this.email = email;
-        this.fullName = fullName;
-        this.joinedChannels = joinedChannels;
-        this.community = community;           // 👈 Assigning the community
-        this.name = name;
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.community = community;
         this.phone = phone;
         this.profilePicture = profilePicture;
         this.role = role;
         this.username = username;
-        this.password = password;
         this.keycloakId = keycloakId;
         this.emailVerified = emailVerified;
+        this.joinedChannels = joinedChannels;
     }
 }

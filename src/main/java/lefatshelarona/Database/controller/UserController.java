@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import  lefatshelarona.Database.model.User;
+import lefatshelarona.Database.model.User;
 import lefatshelarona.Database.repository.UserRepository;
 
 import java.util.Collections;
@@ -42,6 +42,8 @@ public class UserController {
     }
 
     @Operation(summary = "Get user by ID", description = "Fetches a user by their ID.")
+    @ApiResponse(responseCode = "200", description = "User retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "User not found")
     @GetMapping("/getById/{id}")
     public ResponseEntity<User> getUserById(@PathVariable String id) {
         return userRepository.findById(id)
@@ -50,26 +52,31 @@ public class UserController {
     }
 
     @Operation(summary = "Update user by ID", description = "Updates a user's information.")
+    @ApiResponse(responseCode = "200", description = "User updated successfully")
+    @ApiResponse(responseCode = "404", description = "User not found")
     @PutMapping("/update/{id}")
     public ResponseEntity<User> updateUser(@PathVariable String id, @RequestBody User updatedUser) {
         Optional<User> existingUser = userRepository.findById(id);
         if (existingUser.isPresent()) {
             User user = existingUser.get();
             user.setEmail(updatedUser.getEmail());
-            user.setFullName(updatedUser.getFullName());
-            user.setJoinedChannels(updatedUser.getJoinedChannels());
-            user.setCommunity(updatedUser.getCommunity()); // ✅ NEW
-            user.setName(updatedUser.getName());
-            user.setPhone(updatedUser.getPhone());
-            user.setProfilePicture(updatedUser.getProfilePicture());
+            user.setFirstName(updatedUser.getFirstName());
+            user.setLastName(updatedUser.getLastName());
             user.setUsername(updatedUser.getUsername());
-            // Optionally update role or other flags if allowed
+            user.setPhone(updatedUser.getPhone());
+            user.setCommunity(updatedUser.getCommunity());
+            user.setProfilePicture(updatedUser.getProfilePicture());
+            user.setJoinedChannels(updatedUser.getJoinedChannels());
+            // Optionally update role or other fields here
+
             return ResponseEntity.ok(userRepository.save(user));
         }
         return ResponseEntity.notFound().build();
     }
 
     @Operation(summary = "Delete user by ID", description = "Deletes a user by their ID.")
+    @ApiResponse(responseCode = "200", description = "User deleted successfully")
+    @ApiResponse(responseCode = "404", description = "User not found")
     @DeleteMapping("/delete/{id}")
     public ResponseEntity<String> deleteUser(@PathVariable String id) {
         if (userRepository.existsById(id)) {
@@ -83,8 +90,8 @@ public class UserController {
             summary = "Resend Email Verification",
             description = "Triggers Keycloak to send a verification email to the user in the Lefatshe-Larona realm."
     )
-    @ApiResponse(responseCode = "204", description = "Verification email sent successfully")
-    @ApiResponse(responseCode = "400", description = "Failed to send verification email")
+    @ApiResponse(responseCode = "200", description = "Verification email sent successfully")
+    @ApiResponse(responseCode = "500", description = "Error sending email")
     @PostMapping("/resendVerification/{keycloakUserId}")
     public ResponseEntity<String> resendVerificationEmail(@PathVariable String keycloakUserId) {
         try {

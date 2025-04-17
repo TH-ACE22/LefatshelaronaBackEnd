@@ -30,6 +30,8 @@ public class SecurityConfig {
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/users/resendVerification/**").permitAll()
                         .requestMatchers("/auth/check-email/**").permitAll()
+                        .requestMatchers("/auth/verify-code").permitAll()
+                        .requestMatchers("/auth/resend-code").permitAll()
 
                         .requestMatchers("/oauth2/**").permitAll()
                         // Queries
