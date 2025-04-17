@@ -29,8 +29,7 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import java.net.URLDecoder;
-import  java.net.URL;
-
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -71,13 +70,17 @@ public class AuthService {
         }
     }
 
+
+
     public boolean validateToken(String token) {
         try {
             SignedJWT signedJWT = SignedJWT.parse(token);
-            JWKSet jwkSet = JWKSet.load(new URL("http://localhost:8080/realms/lefatshe-larona/protocol/openid-connect/certs"));
+
+            URI jwksUri = URI.create("http://localhost:8080/realms/lefatshe-larona/protocol/openid-connect/certs");
+            JWKSet jwkSet = JWKSet.load(jwksUri.toURL());
             RSAKey rsaKey = (RSAKey) jwkSet.getKeys().get(0);
             JWSVerifier verifier = new RSASSAVerifier(rsaKey);
-            boolean isValid = signedJWT.verify(verifier);
+            boolean isValid   = signedJWT.verify(verifier);
             boolean notExpired = new Date().before(signedJWT.getJWTClaimsSet().getExpirationTime());
             return isValid && notExpired;
         } catch (Exception e) {
@@ -85,6 +88,7 @@ public class AuthService {
             return false;
         }
     }
+
     public ResponseEntity<?> registerUser(RegisterRequest request) {
         Map<String, String> errorDetails = new HashMap<>();
 
@@ -282,8 +286,7 @@ public class AuthService {
             return ResponseEntity.ok("New verification code sent to your email.");
 
         } catch (Exception e) {
-            e.printStackTrace();
-            System.err.println("❌ Failed to resend verification code for email: " + email);
+            logger.error("Failed to resend verification code for email={}", email, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to resend verification code.");
         }
