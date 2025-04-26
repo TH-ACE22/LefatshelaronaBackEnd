@@ -157,4 +157,10 @@ public class AuthController {
             return ResponseEntity.status(401).body("Token is invalid or expired");
         }
     }
+    @PostMapping("/refresh")
+    @Operation(summary = "Refresh access token")
+    public ResponseEntity<?> refreshToken(@RequestParam String refreshToken) {
+        return authService.refreshAccessToken(refreshToken);
+    }
+
 }

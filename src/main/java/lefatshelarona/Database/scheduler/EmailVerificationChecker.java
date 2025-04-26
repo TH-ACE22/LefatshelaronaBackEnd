@@ -10,7 +10,7 @@ import org.keycloak.admin.client.Keycloak;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-
+import java.util.HashSet;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -38,20 +38,21 @@ public class EmailVerificationChecker {
 
                 if (kcUser.isEmailVerified()) {
                     // ✅ Build verified user from pending
-                    User verifiedUser = new User(
-                            pending.getEmail(),
-                            pending.getFirstName(),
-                            pending.getLastName(),
-                            null,                    // community (to be filled later)
-                            pending.getPhone(),
-                            null,                    // profilePicture (to be filled later)
-                            pending.getRole(),
-                            pending.getUsername(),
-                            pending.getKeycloakId(),
-                            true,
-                            new ArrayList<>()        // joinedChannels
-                    );
-
+                    User verifiedUser = User.builder()
+                            // let Mongo generate `id`
+                            .keycloakId(pending.getKeycloakId())
+                            .emailVerified(true)
+                            .email(pending.getEmail())
+                            .username(pending.getUsername())
+                            .firstName(pending.getFirstName())
+                            .lastName(pending.getLastName())
+                            .phone(pending.getPhone())
+                            .role(pending.getRole())
+                            // optional, you can omit .community() and .profilePicture() if null is acceptable
+                            .community(null)
+                            .profilePicture(null)
+                            .joinedChannels(new HashSet<>())
+                            .build();
 
                     userRepository.save(verifiedUser);
                     pendingUserRepository.deleteById(keycloakId);

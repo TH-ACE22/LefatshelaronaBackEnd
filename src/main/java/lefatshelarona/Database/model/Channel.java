@@ -24,4 +24,8 @@ public class Channel {
     public void removeUser(String userId) {
         this.users.remove(userId);
     }
+    public List<String> getJoinedUsers() {
+        return users;
+    }
+
 }

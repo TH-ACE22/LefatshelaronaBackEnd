@@ -2,6 +2,7 @@ package lefatshelarona.Database.service;
 
 import lefatshelarona.Database.model.Channel;
 import lefatshelarona.Database.repository.ChannelRepository;
+import lefatshelarona.Database.repository.CommunityRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -13,13 +14,21 @@ import java.util.Optional;
 public class ChannelService {
 
     private final ChannelRepository channelRepository;
+    private final CommunityRepository communityRepository;
+    public Channel createChannel(Channel channel, String communityId) {
+        // Save the new channel
+        Channel savedChannel = channelRepository.save(channel);
 
-    public Channel createChannel(Channel channel) {
-        if (channelRepository.findByChannelName(channel.getChannelName()).isPresent()) {
-            throw new RuntimeException("Channel already exists!");
-        }
-        return channelRepository.save(channel);
+        // Link the channel to the community
+        communityRepository.findById(communityId).ifPresent(community -> {
+            community.addChannelId(savedChannel.getId());
+            communityRepository.save(community);
+        });
+
+        return savedChannel;
     }
+
+
 
     public void deleteChannel(String channelId) {
         if (channelRepository.existsById(channelId)) {
@@ -46,6 +55,7 @@ public class ChannelService {
                 })
                 .orElseThrow(() -> new RuntimeException("Channel not found!"));
     }
+
 
     public Optional<Channel> getChannelById(String channelId) {
         return channelRepository.findById(channelId);

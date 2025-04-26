@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+
 
 import java.util.List;
 
@@ -41,5 +43,16 @@ public class NotificationController {
     public ResponseEntity<Notification> sendNotification(@RequestBody Notification notification) {
         Notification sentNotification = notificationService.sendNotification(notification);
         return ResponseEntity.ok(sentNotification);
+    }
+
+    @Operation(
+            summary = "Get notifications for joined channels",
+            description = "Retrieves notifications only for channels that the authenticated user has joined."
+    )
+    @GetMapping("/joined")
+    public ResponseEntity<List<Notification>> getUserNotifications(JwtAuthenticationToken auth) {
+        String userId = auth.getToken().getSubject();
+        List<Notification> notifications = notificationService.getNotificationsForUser(userId);
+        return ResponseEntity.ok(notifications);
     }
 }

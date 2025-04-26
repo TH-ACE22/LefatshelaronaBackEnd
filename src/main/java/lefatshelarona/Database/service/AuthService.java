@@ -8,7 +8,12 @@ import lefatshelarona.Database.repository.EmailVerificationCodeRepository;
 import lefatshelarona.Database.repository.PendingUserRepository;
 import lefatshelarona.Database.repository.UserRepository;
 import lefatshelarona.Database.util.EmailService;
-
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jwt.SignedJWT;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import com.nimbusds.jose.JWSVerifier;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
 import com.nimbusds.jose.jwk.JWKSet;
@@ -24,7 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
-import org.springframework.stereotype.Service;
+
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -294,9 +299,10 @@ public class AuthService {
 
 
 
-    public ResponseEntity<String> loginUser(LoginRequest request) {
+    public ResponseEntity<?> loginUser(LoginRequest request) {
         String tokenUrl = "http://localhost:8080/realms/Lefatshe-Larona/protocol/openid-connect/token";
 
+        // Prepare form data
         RestTemplate restTemplate = new RestTemplate();
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
         formData.add("client_id", "lefatshe-larona-backend");
@@ -305,17 +311,77 @@ public class AuthService {
         formData.add("username", request.getUsername());
 
         formData.add("password", request.getPassword());
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formData, headers);
 
         try {
-            ResponseEntity<String> response = restTemplate.postForEntity(tokenUrl, entity, String.class);
-            return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
+            // 1. Fetch the raw JSON string from Keycloak
+            ResponseEntity<String> raw = restTemplate.postForEntity(tokenUrl, entity, String.class);
+
+            if (!raw.getStatusCode().is2xxSuccessful()) {
+                return ResponseEntity.status(raw.getStatusCode()).body(raw.getBody());
+            }
+
+            String body = raw.getBody();
+            // 2. Parse it into a Map
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String,Object> tokens = mapper.readValue(body, new TypeReference<>(){});
+
+            // 3. Extract and decode the access_token JWT
+            String accessToken = (String) tokens.get("access_token");
+            SignedJWT jwt = SignedJWT.parse(accessToken);
+            String userId = jwt.getJWTClaimsSet().getSubject();
+
+            // 4. Build a simple response map
+            Map<String,String> resp = new HashMap<>();
+            resp.put("token",        accessToken);
+            resp.put("refreshToken", (String) tokens.get("refresh_token"));
+            resp.put("userId",       userId);
+
+            return ResponseEntity.ok(resp);
+
         } catch (Exception e) {
             logger.error("Login failed", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Login error: " + e.getMessage());
         }
     }
+    public ResponseEntity<?> refreshAccessToken(String refreshToken) {
+        String tokenUrl = "http://localhost:8080/realms/Lefatshe-Larona/protocol/openid-connect/token";
+
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("grant_type", "refresh_token");
+        formData.add("client_id", "lefatshe-larona-backend");
+        formData.add("client_secret", "cOxcIPFhM5SiHZKY4OPw1tAZxpK0bGQp"); // must match Keycloak client
+        formData.add("refresh_token", refreshToken); // ✅ Must be valid and not expired
+
+        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formData, headers);
+
+        try {
+            ResponseEntity<String> response = restTemplate.postForEntity(tokenUrl, entity, String.class);
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
+            }
+
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> tokens = mapper.readValue(response.getBody(), new TypeReference<>() {});
+            return ResponseEntity.ok(Map.of(
+                    "token", tokens.get("access_token"),
+                    "refreshToken", tokens.get("refresh_token"),
+                    "userId", ((String) tokens.get("access_token")) // optionally extract from JWT
+            ));
+        } catch (Exception e) {
+            logger.error("Refresh token failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Refresh token failed: " + e.getMessage());
+        }
+    }
+
 }
