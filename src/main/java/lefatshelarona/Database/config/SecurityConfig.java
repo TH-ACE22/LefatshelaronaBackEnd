@@ -30,7 +30,7 @@ public class SecurityConfig {
                         .requestMatchers("/ws/**").permitAll() // ✅ ADD THIS LINE
 
                         // auth & public
-                        .requestMatchers("/auth/register", "/auth/login", "/auth/refresh").permitAll()
+                        .requestMatchers("/auth/register", "/auth/login", "/auth/refresh", "/auth/register-admin").permitAll()
                         .requestMatchers("/auth/check-username/**", "/auth/check-email/**").permitAll()
                         .requestMatchers("/auth/verify-code", "/auth/resend-code").permitAll()
                         .requestMatchers("/users/resendVerification/**").permitAll()
@@ -43,6 +43,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/communities/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/communities/**").hasAuthority("ROLE_ADMIN")
                         .requestMatchers(HttpMethod.POST, "/communities/*/join", "/communities/*/leave").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/users/view-user").authenticated()
 
                         .requestMatchers(HttpMethod.GET, "/channels", "/channels/{id}").authenticated()
                         .requestMatchers(HttpMethod.POST, "/channels").hasAuthority("ROLE_ADMIN")

@@ -1,4 +1,3 @@
-// PostService.java
 package lefatshelarona.Database.service;
 
 import lombok.RequiredArgsConstructor;
@@ -6,7 +5,7 @@ import org.springframework.stereotype.Service;
 import lefatshelarona.Database.model.Post;
 import lefatshelarona.Database.model.Comment;
 import lefatshelarona.Database.repository.PostRepository;
-import lefatshelarona.Database.controller.RealtimeController;
+import lefatshelarona.Database.realtime.RealtimeService;
 
 import java.util.List;
 import java.util.Optional;
@@ -15,11 +14,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class PostService {
     private final PostRepository postRepository;
-    private final RealtimeController realtimeController;
+    private final RealtimeService realtimeService;
 
     public Post createPost(Post post) {
         Post saved = postRepository.save(post);
-        realtimeController.broadcastPostUpdate(saved);
+        realtimeService.broadcastNewPost(saved, post.getChannelId());
         return saved;
     }
 
@@ -50,7 +49,8 @@ public class PostService {
                 })
                 .map(postRepository::save)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
-        realtimeController.broadcastPostUpdate(updated);
+
+        realtimeService.broadcastPostLikeUpdate(updated.getId(), updated.getLikes().size());
         return updated;
     }
 
@@ -65,7 +65,8 @@ public class PostService {
                 })
                 .map(postRepository::save)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
-        realtimeController.broadcastPostUpdate(updated);
+
+        realtimeService.broadcastPostLikeUpdate(updated.getId(), updated.getLikes().size());
         return updated;
     }
 
@@ -75,13 +76,18 @@ public class PostService {
                     Comment comment = new Comment();
                     comment.setUserId(userId);
                     comment.setUsername(username);
-                    comment.setComment(commentText);
+                    comment.setText(commentText); // 🛠 Corrected
                     post.getComments().add(comment);
                     return post;
                 })
                 .map(postRepository::save)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
-        realtimeController.broadcastPostUpdate(updated);
+
+        if (!updated.getComments().isEmpty()) {
+            Comment latestComment = updated.getComments().get(updated.getComments().size() - 1);
+            realtimeService.broadcastNewComment(latestComment, postId);
+        }
+
         return updated;
     }
 
@@ -89,20 +95,20 @@ public class PostService {
         Post updated = postRepository.findById(postId)
                 .map(post -> {
                     post.getComments().stream()
-                            .filter(c -> c.getCommentId().equals(commentId))
+                            .filter(c -> c.getId().equals(commentId)) // 🛠 Corrected
                             .findFirst()
                             .ifPresent(parent -> {
                                 Comment reply = new Comment();
                                 reply.setUserId(userId);
                                 reply.setUsername(username);
-                                reply.setComment(replyText);
+                                reply.setText(replyText); // 🛠 Corrected
                                 parent.getReplies().add(reply);
                             });
                     return post;
                 })
                 .map(postRepository::save)
                 .orElseThrow(() -> new RuntimeException("Post not found"));
-        realtimeController.broadcastPostUpdate(updated);
+
         return updated;
     }
 }

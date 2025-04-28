@@ -3,6 +3,7 @@ package lefatshelarona.Database.controller;
 import org.keycloak.admin.client.Keycloak;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,7 +11,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lefatshelarona.Database.model.User;
 import lefatshelarona.Database.repository.UserRepository;
-
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -50,6 +51,7 @@ public class UserController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+
 
     @Operation(summary = "Update user by ID", description = "Updates a user's information.")
     @ApiResponse(responseCode = "200", description = "User updated successfully")
@@ -103,5 +105,18 @@ public class UserController {
             return ResponseEntity.status(500)
                     .body("Error sending verification email: " + e.getMessage());
         }
+    }
+
+    @Operation(
+            summary = "View user by Mongo ID",
+            description = "Returns the user document for the given MongoDB _id."
+    )
+    @ApiResponse(responseCode = "200", description = "User retrieved successfully")
+    @ApiResponse(responseCode = "404", description = "User not found")
+    @GetMapping("/view-user/{id}")
+    public ResponseEntity<User> viewUserByMongoId(@PathVariable("id") String id) {
+        return userRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 }

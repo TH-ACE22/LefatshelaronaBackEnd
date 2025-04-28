@@ -4,6 +4,7 @@ import lefatshelarona.Database.dto.LoginRequest;
 import lefatshelarona.Database.dto.RegisterRequest;
 import lefatshelarona.Database.model.EmailVerificationCode;
 import lefatshelarona.Database.model.PendingUser;
+import lefatshelarona.Database.model.User;
 import lefatshelarona.Database.repository.EmailVerificationCodeRepository;
 import lefatshelarona.Database.repository.PendingUserRepository;
 import lefatshelarona.Database.repository.UserRepository;
@@ -30,6 +31,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 
+import lefatshelarona.Database.model.Admin;
+import lefatshelarona.Database.repository.AdminRepository;
+
+
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
@@ -48,7 +53,9 @@ public class AuthService {
     private final PendingUserRepository pendingUserRepository;
     private final EmailVerificationCodeRepository codeRepository;
     private final EmailService emailService;
+    private final UserRepository userRepository;
     private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
+    private final AdminRepository adminRepository;
 
     @Autowired
     public AuthService(
@@ -56,13 +63,18 @@ public class AuthService {
             PendingUserRepository pendingUserRepository,
             EmailVerificationCodeRepository codeRepository,
             EmailService emailService,
-            UserRepository userRepository // placeholder
+            UserRepository userRepository,
+            AdminRepository adminRepository
     ) {
         this.keycloak = keycloak;
         this.pendingUserRepository = pendingUserRepository;
         this.codeRepository = codeRepository;
         this.emailService = emailService;
+        this.userRepository = userRepository;
+        this.adminRepository = adminRepository;
     }
+
+
 
     public boolean isEmailAvailable(String email) {
         try {
@@ -134,7 +146,7 @@ public class AuthService {
                         // Assign default role
                         RoleRepresentation userRole = keycloak.realm("Lefatshe-Larona")
                                 .roles()
-                                .get("ROLE_USER")
+                                .get("ROLE_ADMIN")
                                 .toRepresentation();
 
                         keycloak.realm("Lefatshe-Larona")
@@ -298,47 +310,163 @@ public class AuthService {
     }
 
 
+    public ResponseEntity<?> registerAdmin(RegisterRequest request) {
+        Map<String, String> errorDetails = new HashMap<>();
+
+        if (!isEmailAvailable(request.getEmail())) {
+            errorDetails.put("email", "Email already exists.");
+        }
+
+        if (!errorDetails.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorDetails);
+        }
+
+        UsersResource usersResource = keycloak.realm("Lefatshe-Larona").users();
+
+        UserRepresentation keycloakUser = new UserRepresentation();
+        keycloakUser.setUsername(request.getUsername());
+        keycloakUser.setEmail(request.getEmail());
+        keycloakUser.setFirstName(request.getFirstName());
+        keycloakUser.setLastName(request.getLastName());
+        keycloakUser.setEnabled(true);
+        keycloakUser.setEmailVerified(false);
+        keycloakUser.setRequiredActions(Collections.singletonList("VERIFY_EMAIL"));
+
+        CredentialRepresentation password = new CredentialRepresentation();
+        password.setType(CredentialRepresentation.PASSWORD);
+        password.setValue(request.getPassword());
+        password.setTemporary(false);
+        keycloakUser.setCredentials(Collections.singletonList(password));
+
+        try (Response response = usersResource.create(keycloakUser)) {
+            if (response.getStatus() == 201) {
+                String locationHeader = response.getHeaderString("Location");
+                String userId = locationHeader != null
+                        ? locationHeader.substring(locationHeader.lastIndexOf("/") + 1)
+                        : null;
+
+                if (userId != null) {
+                    try {
+                        // Assign ADMIN role
+                        RoleRepresentation adminRole = keycloak.realm("Lefatshe-Larona")
+                                .roles()
+                                .get("ROLE_ADMIN")
+                                .toRepresentation();
+
+                        keycloak.realm("Lefatshe-Larona")
+                                .users()
+                                .get(userId)
+                                .roles()
+                                .realmLevel()
+                                .add(Collections.singletonList(adminRole));
+
+                        // Generate verification code
+                        String code = String.valueOf((int)(Math.random() * 900000) + 100000);
+                        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(10);
+
+                        EmailVerificationCode verification = new EmailVerificationCode(
+                                request.getEmail(), code, userId, expiresAt
+                        );
+                        codeRepository.save(verification);
+
+                        // Send the code to admin's email
+                        emailService.sendVerificationCode(request.getEmail(), code);
+
+                        // Save admin directly (NO pendingUser)
+                        Admin admin = Admin.builder()
+                                .keycloakId(userId)
+                                .fullName(request.getFirstName() + " " + request.getLastName())
+                                .firstName(request.getFirstName())
+                                .lastName(request.getLastName())
+                                .email(request.getEmail())
+                                .username(request.getUsername())
+                                .phone(request.getPhone())
+                                .role("ROLE_ADMIN")
+                                .emailVerified(false)
+                                .profilePicture(null)
+                                .build();
+                        adminRepository.save(admin);
+
+                        return ResponseEntity.ok("Admin registration successful. Verification code sent to email.");
+                    } catch (Exception e) {
+                        logger.error("Error during admin role assignment or code sending", e);
+                        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(Map.of("error", "Admin created, but failed to assign role or send code."));
+                    }
+                } else {
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(Map.of("error", "Admin created, but user ID missing."));
+                }
+            } else {
+                logger.error("Keycloak admin creation failed: {}", response.getStatus());
+                return ResponseEntity.status(response.getStatus())
+                        .body(Map.of("error", "Failed to register admin in Keycloak."));
+            }
+        }
+    }
+
+
 
     public ResponseEntity<?> loginUser(LoginRequest request) {
         String tokenUrl = "http://localhost:8080/realms/Lefatshe-Larona/protocol/openid-connect/token";
 
-        // Prepare form data
+        // 1️⃣ Exchange credentials for tokens
         RestTemplate restTemplate = new RestTemplate();
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-        formData.add("client_id", "lefatshe-larona-backend");
+        formData.add("client_id",     "lefatshe-larona-backend");
         formData.add("client_secret", "cOxcIPFhM5SiHZKY4OPw1tAZxpK0bGQp");
-        formData.add("grant_type", "password");
-        formData.add("username", request.getUsername());
-
-        formData.add("password", request.getPassword());
+        formData.add("grant_type",    "password");
+        formData.add("username",      request.getUsername());
+        formData.add("password",      request.getPassword());
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
         HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formData, headers);
 
         try {
-            // 1. Fetch the raw JSON string from Keycloak
             ResponseEntity<String> raw = restTemplate.postForEntity(tokenUrl, entity, String.class);
-
             if (!raw.getStatusCode().is2xxSuccessful()) {
                 return ResponseEntity.status(raw.getStatusCode()).body(raw.getBody());
             }
 
-            String body = raw.getBody();
-            // 2. Parse it into a Map
+            // 2️⃣ Parse tokens & extract Keycloak ID
             ObjectMapper mapper = new ObjectMapper();
-            Map<String,Object> tokens = mapper.readValue(body, new TypeReference<>(){});
-
-            // 3. Extract and decode the access_token JWT
+            Map<String,Object> tokens = mapper.readValue(raw.getBody(), new TypeReference<>(){});
             String accessToken = (String) tokens.get("access_token");
-            SignedJWT jwt = SignedJWT.parse(accessToken);
-            String userId = jwt.getJWTClaimsSet().getSubject();
+            SignedJWT jwt       = SignedJWT.parse(accessToken);
+            String keycloakId  = jwt.getJWTClaimsSet().getSubject();
 
-            // 4. Build a simple response map
+            // 3️⃣ Find or CREATE the local Mongo User
+            User mongoUser = userRepository.findByKeycloakId(keycloakId)
+                    .orElseGet(() -> {
+                        // fetch user data from Keycloak
+                        UserRepresentation kcUser = keycloak.realm("Lefatshe-Larona")
+                                .users()
+                                .get(keycloakId)
+                                .toRepresentation();
+
+                        // build a new User document
+                        User newUser = User.builder()
+                                .keycloakId(keycloakId)
+                                .emailVerified(kcUser.isEmailVerified())
+                                .email(kcUser.getEmail())
+                                .username(kcUser.getUsername())
+                                .firstName(kcUser.getFirstName())
+                                .lastName(kcUser.getLastName())
+                                .role("ROLE_USER")          // or derive from kcUser.getRealmRoles()
+                                .build();
+
+                        return userRepository.save(newUser);
+                    });
+
+            String mongoUserId = mongoUser.getId();
+
+            // 4️⃣ Build and return the response
             Map<String,String> resp = new HashMap<>();
-            resp.put("token",        accessToken);
-            resp.put("refreshToken", (String) tokens.get("refresh_token"));
-            resp.put("userId",       userId);
+            resp.put("accessToken",    accessToken);
+            resp.put("refreshToken",   (String) tokens.get("refresh_token"));
+            resp.put("keycloakUserId", keycloakId);
+            resp.put("mongoUserId",    mongoUserId);
 
             return ResponseEntity.ok(resp);
 
@@ -348,6 +476,7 @@ public class AuthService {
                     .body("Login error: " + e.getMessage());
         }
     }
+
     public ResponseEntity<?> refreshAccessToken(String refreshToken) {
         String tokenUrl = "http://localhost:8080/realms/Lefatshe-Larona/protocol/openid-connect/token";
 

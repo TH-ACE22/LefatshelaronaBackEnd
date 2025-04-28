@@ -1,13 +1,16 @@
 package lefatshelarona.Database.controller;
 
 import lefatshelarona.Database.model.Post;
-import  lefatshelarona.Database.service.PostService;
+import lefatshelarona.Database.realtime.RealtimeService;
+import lefatshelarona.Database.service.PostService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Optional;
 
+@Slf4j
 @RestController
 @RequestMapping("/posts")
 @Tag(name = "Post Management", description = "Operations related to user posts")
@@ -22,6 +26,7 @@ import java.util.Optional;
 public class PostController {
 
     private final PostService postService;
+    private final RealtimeService realtimeService;
 
     @Operation(summary = "Create a new post", description = "Allows a user to create a new post.")
     @ApiResponse(responseCode = "201", description = "Post created successfully",
@@ -32,7 +37,7 @@ public class PostController {
     @PreAuthorize("hasAuthority('USER')")
     public ResponseEntity<Post> createPost(@RequestBody Post post) {
         Post created = postService.createPost(post);
-        return ResponseEntity.status(201).body(created);
+        return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @Operation(summary = "Get a post by ID", description = "Fetches details of a specific post.")

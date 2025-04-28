@@ -163,4 +163,10 @@ public class AuthController {
         return authService.refreshAccessToken(refreshToken);
     }
 
+    @PostMapping("/register-admin")
+    public ResponseEntity<?> registerAdmin(@RequestBody RegisterRequest request) {
+        return authService.registerAdmin(request);
+    }
+
+
 }
