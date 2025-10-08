@@ -14,7 +14,7 @@ It serves as the foundation for the Lefatshe Larona ecosystem.
 
 ## 🧩 Tech Stack
 
-- **Language:** java **
-- **Framework:** Spingboot**
-- **Database:** MongoDB  ** 
+- **Language:** java 
+- **Framework:** Spingboot
+- **Database:** MongoDB  
   
